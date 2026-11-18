@@ -1,0 +1,88 @@
+name: fpclaims
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 */6 * * *'
+
+concurrency:
+  group: fpclaims-chain
+  cancel-in-progress: false
+
+jobs:
+  claims:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: deps
+        run: |
+          pip install -q playwright curl_cffi
+          playwright install chromium
+          sudo apt-get install -y -q xvfb >/dev/null 2>&1 || true
+      - name: fetch state
+        run: |
+          git clone --depth 1 "https://x-access-token:${{ secrets.OPS_PAT }}@github.com/matheus24scc/fpmig-state.git" ghstate
+          mkdir -p /tmp/ante
+          cp -f ghstate/files/* /tmp/ 2>/dev/null || true
+          cp -f ghstate/files/ante/* /tmp/ante/ 2>/dev/null || true
+          cp -f *.py /tmp/ && cp -f fp_faucets_all.json /tmp/
+      - name: launch browser + inject FP session
+        run: |
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1280x800x24 &
+          sleep 2
+          nohup chromium --headless=new --no-sandbox --disable-gpu \
+            --remote-debugging-port=9222 --user-data-dir=/tmp/fpprof \
+            about:blank > /tmp/chrome.log 2>&1 &
+          # playwright's chromium may be named differently; fallback launch
+          sleep 3
+          if ! curl -s http://localhost:9222/json/version >/dev/null; then
+            CHROME=$(find ~/.cache/ms-playwright -name 'chrome' -o -name 'chromium' -o -name 'headless_shell' | head -1)
+            nohup "$CHROME" --headless=new --no-sandbox --disable-gpu \
+              --remote-debugging-port=9222 --user-data-dir=/tmp/fpprof \
+              about:blank > /tmp/chrome.log 2>&1 &
+            sleep 3
+          fi
+          curl -s http://localhost:9222/json/version | head -3
+          xvfb-run -a python inject_cookies.py
+      - name: claim worker + supervisor
+        run: |
+          cd /tmp
+          launch() { nohup python "/tmp/$1" > "/tmp/${1//\//_}.out" 2>&1 & }
+          launch fp_faucet_claim.py
+          ST="$GITHUB_WORKSPACE/ghstate"
+          i=0
+          while [ $SECONDS -lt 19500 ]; do
+            sleep 120
+            i=$((i+1))
+            pgrep -f "python /tmp/fp_faucet_claim.py" >/dev/null || launch fp_faucet_claim.py
+            if [ $((i % 15)) -eq 0 ]; then
+              cp -f /tmp/fp_claim_state.json "$ST/files/" 2>/dev/null || true
+              {
+                echo "=== $(date -u +%FT%TZ) ==="
+                pgrep -f "python /tmp/fp_faucet_claim.py" >/dev/null && echo "UP fp_faucet_claim.py" || echo "DOWN fp_faucet_claim.py"
+                tail -8 /tmp/fp_faucet_claim.py.out 2>/dev/null
+              } > "$ST/files/fpclaims_heartbeat.txt"
+              cd "$ST" && git config user.email ops@local && git config user.name ops \
+                && git add -A files 2>/dev/null \
+                && { git diff --cached --quiet || { git commit -qm "fpclaims snap $(date -u +%H%M)" && git push -q; }; } \
+                && cd /tmp || true
+            fi
+          done
+      - name: save state
+        if: always()
+        run: |
+          cd ghstate || exit 0
+          mkdir -p files
+          cp -f /tmp/fp_claim_state.json files/ 2>/dev/null || true
+          {
+            echo "=== $(date -u +%FT%TZ) final ==="
+            tail -15 /tmp/fp_faucet_claim.py.out 2>/dev/null
+          } > files/fpclaims_heartbeat.txt
+          git config user.email ops@local && git config user.name ops
+          git add -A files 2>/dev/null || true
+          git diff --cached --quiet || git commit -qm "fpclaims state $(date -u +%FT%TZ)" && git push -q || true

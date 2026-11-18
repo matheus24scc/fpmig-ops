@@ -144,8 +144,18 @@ def analyze(pair,fund):
         if len(dc)>=21: r_d_prev=rsi(dc[:-1])
     two_down_d = cd is not None and len(cd)>=20 and dc[-1]<dc[-2]<dc[-3]
     hook_d = r_d is not None and r_d_prev is not None and r_d>r_d_prev
+    # capitulation-reclaim (edge family #2): last COMPLETED day dumped <=-7%
+    # on >=2.5x median volume, and today's candle reclaims above that open
+    capit_d=False
+    if cd is not None and len(cd)>=23:
+        cap=cd[-2]; today=cd[-1]
+        if cap[3] and cap[4] and today[4]:
+            ret=cap[4]/cd[-3][4]-1 if cd[-3][4] else 0
+            vols=[x[5] or 0 for x in cd[-22:-2] if (x[5] or 0)>0]
+            med=sorted(vols)[len(vols)//2] if vols else 0
+            capit_d = ret<=-0.07 and med>0 and (cap[5] or 0)>=2.5*med and today[4]>cap[3]
     body1=(closes[-1]-c1[-1][3])/c1[-1][3]*100 if c1[-1][3] else 0
-    return dict(pair=pair,rsi1=r1,rsi4=r4,rsi_d=r_d,r_d_prev=r_d_prev,two_down_d=two_down_d,hook_d=hook_d,dist_low=dist_low,higher_low=higher_low,
+    return dict(pair=pair,rsi1=r1,rsi4=r4,rsi_d=r_d,r_d_prev=r_d_prev,two_down_d=two_down_d,hook_d=hook_d,capit_d=capit_d,dist_low=dist_low,higher_low=higher_low,
                 rev=rev,why=why,climax=climax,dry=dry,stable3=stable3,chg24=chg24,
                 px=px,funding=f,score=score,reasons=reasons,body1=body1)
 def load_signals():
@@ -229,6 +239,10 @@ def proven_patterns():
     try:
         j=json.load(open('/tmp/cb_proven_extra.json'))
         d=j.get('patterns') or {}
+        try:
+            e=json.load(open('/tmp/cb_edge_proven.json'))
+            d.update(e.get('patterns') or {})
+        except Exception: pass
     except Exception: pass
     _extra_cache['t']=time.time(); _extra_cache['d']=d
     return {**PROVEN_PATTERNS, **d}
@@ -238,7 +252,9 @@ def is_val(a):
     if rd is None: return False
     if p in PROVEN: return rd<30                                   # ALGO: rsi30->2d win75%
     spec=proven_patterns().get(p)
-    if not spec or rd>=spec['rsi']: return False
+    if not spec: return False
+    if spec.get('capit'): return bool(a.get('capit_d'))
+    if rd is None or rd>=spec.get('rsi',101): return False
     if spec.get('two_down'): return bool(a.get('two_down_d'))
     if spec.get('hook'): return bool(a.get('hook_d'))
     return True

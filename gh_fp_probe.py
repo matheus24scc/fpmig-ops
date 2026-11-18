@@ -65,12 +65,17 @@ async def main():
           if(b){b.click();return (b.innerText||'').trim().slice(0,50)} return null;
         }""")
         print('oauth click:', clicked, flush=True)
-        for i in range(12):
+        for i in range(30):
             await pg.wait_for_timeout(2500)
             u = pg.url
-            print('nav', i, u[:100], flush=True)
-            if 'clickclaims' in u and 'faucetpay' not in u:
+            print('nav', i, u[:110], flush=True)
+            # done when back on clickclaims but past the auth/login interstitial
+            if 'clickclaims' in u and '/auth/login' not in u:
                 break
+            # also check for popup pages doing the oauth
+            for t in ctx.pages:
+                if 'faucetpay.io' in t.url:
+                    print('  fp tab:', t.url[:100], flush=True)
         await pg.wait_for_timeout(4000)
         info2 = await pg.evaluate("""()=>{
           const vis=e=>!!(e.offsetWidth||e.offsetHeight);

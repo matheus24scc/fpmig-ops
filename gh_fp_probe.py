@@ -5,7 +5,7 @@
 import asyncio, json, sys
 from playwright.async_api import async_playwright
 
-STATE = '/tmp/ghstate/files/fp_cookies.json'
+STATE = 'ghstate/files/fp_cookies.json'
 
 def load_cookies():
     d = json.load(open(STATE))

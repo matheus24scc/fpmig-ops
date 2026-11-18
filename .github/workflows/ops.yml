@@ -34,17 +34,34 @@ jobs:
       - name: launch daemons + supervisor
         run: |
           cd /tmp
-          SCRIPTS="sub_api_autopilot.py mine_api.py fp_monitor.py sol_api_loop.py cb_algo_mgr_api.py cb_pos_mgr.py cb_monitor2.py cb_proven_scan.py tap_missions.py ante/solver.py"
+          SCRIPTS="sub_api_autopilot.py mine_api.py fp_monitor.py sol_api_loop.py minigame_api.py cb_algo_mgr_api.py cb_pos_mgr.py cb_monitor2.py cb_proven_scan.py tap_missions.py ante/solver.py"
           launch() {
             nohup python "/tmp/$1" > "/tmp/${1//\//_}.out" 2>&1 &
           }
           for s in $SCRIPTS; do launch "$s"; done
-          # supervisor: restart dead daemons until ~5.4h elapsed
+          ST="$GITHUB_WORKSPACE/state"
+          snap() {
+            mkdir -p "$ST/files/ante"
+            cp -f /tmp/*.json /tmp/*.session /tmp/fw_cookies.txt "$ST/files/" 2>/dev/null || true
+            cp -f /tmp/ante/wallet.json /tmp/ante/hints.jsonl "$ST/files/ante/" 2>/dev/null || true
+            {
+              echo "=== $(date -u +%FT%TZ) ==="
+              for s in $SCRIPTS; do pgrep -f "python /tmp/$s" >/dev/null && echo "UP $s" || echo "DOWN $s"; done
+            } > "$ST/files/heartbeat.txt"
+            cd "$ST" && git config user.email ops@local && git config user.name ops \
+              && git add -A files 2>/dev/null \
+              && { git diff --cached --quiet || { git commit -qm "snap $(date -u +%H%M)" && git push -q; }; } \
+              && cd /tmp || true
+          }
+          i=0
+          # supervisor: restart dead daemons until ~5.4h elapsed; snapshot state every ~30min
           while [ $SECONDS -lt 19500 ]; do
             sleep 120
+            i=$((i+1))
             for s in $SCRIPTS; do
               pgrep -f "python /tmp/$s" >/dev/null || launch "$s"
             done
+            [ $((i % 15)) -eq 0 ] && snap
           done
 
       - name: save state

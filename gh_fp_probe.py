@@ -89,13 +89,32 @@ async def main():
           return {url:location.href,btns,forms,body:document.body.innerText.slice(0,300)};
         }""")
         print('after oauth:', json.dumps(info2)[:800], flush=True)
-        # try claim via fetch inside page (same trick as worker)
+        # wait for turnstile to auto-solve, then check token + click real claim button
+        for w in range(10):
+            tok = await pg.evaluate("""()=>{
+              const el=document.querySelector('[name="cf-turnstile-response"],[name="captcha_token"],[name="captcha"]');
+              return el&&el.value?el.value.slice(0,40)+'...len'+el.value.length:'none';
+            }""")
+            print('turnstile token:', tok, flush=True)
+            if 'len' in tok and 'none' not in tok:
+                break
+            await pg.wait_for_timeout(2000)
+        # click the real claim button (lets page JS handle turnstile+submit)
+        try:
+            btn = pg.locator('button:has-text("Claim"),input[value*="laim"]').first
+            await btn.click(timeout=8000)
+            print('claim button clicked', flush=True)
+        except Exception as e:
+            print('claim click err', repr(e)[:120], flush=True)
+        await pg.wait_for_timeout(12000)
+        fin = await pg.evaluate("()=>document.body.innerText.slice(0,500)")
+        print('final page:', fin[:400].replace('\n', ' | '), flush=True)
+        # also try fetch submit with token if present
         res = await pg.evaluate("""async()=>{
           const vis=e=>!!(e.offsetWidth||e.offsetHeight);
           const f=[...document.querySelectorAll('form')].find(x=>vis(x));
           if(!f) return 'noform';
           const fd=new FormData(f);
-          // inject captcha tokens if solved
           for(const n of ['cf-turnstile-response','h-captcha-response','g-recaptcha-response','captcha_token','captcha']){
             const el=f.querySelector('[name="'+n+'"]'); if(el&&el.value) fd.set(n,el.value);
           }

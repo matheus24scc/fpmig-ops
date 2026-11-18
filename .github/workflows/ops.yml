@@ -1,0 +1,65 @@
+name: ops
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_run:
+    workflows: ['ops']
+    types: [completed]
+
+concurrency:
+  group: ops-chain
+  cancel-in-progress: false
+
+jobs:
+  daemons:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: install deps
+        run: pip install -q curl_cffi telethon
+
+      - name: fetch state
+        run: |
+          git clone --depth 1 "https://x-access-token:${{ secrets.OPS_PAT }}@github.com/matheus24scc/fpmig-state.git" state
+          mkdir -p /tmp/ante
+          cp -f state/files/* /tmp/ 2>/dev/null || true
+          cp -f state/files/ante/* /tmp/ante/ 2>/dev/null || true
+          ls /tmp | head -50
+
+      - name: launch daemons + supervisor
+        run: |
+          cd /tmp
+          SCRIPTS="sub_api_autopilot.py mine_api.py fp_monitor.py sol_api_loop.py cb_algo_mgr_api.py cb_pos_mgr.py cb_monitor2.py cb_proven_scan.py tap_missions.py ante/solver.py"
+          launch() {
+            nohup python "/tmp/$1" > "/tmp/${1//\//_}.out" 2>&1 &
+          }
+          for s in $SCRIPTS; do launch "$s"; done
+          # supervisor: restart dead daemons until ~5.4h elapsed
+          while [ $SECONDS -lt 19500 ]; do
+            sleep 120
+            for s in $SCRIPTS; do
+              pgrep -f "python /tmp/$s" >/dev/null || launch "$s"
+            done
+          done
+
+      - name: save state
+        if: always()
+        run: |
+          cd state || exit 0
+          mkdir -p files/ante
+          # persist runtime state files (json/session) back to private repo
+          for f in /tmp/*.json /tmp/*.session /tmp/fw_cookies.txt; do
+            [ -f "$f" ] && cp -f "$f" files/ 2>/dev/null || true
+          done
+          cp -f /tmp/ante/wallet.json /tmp/ante/hints.jsonl files/ante/ 2>/dev/null || true
+          git config user.email "ops@local" && git config user.name "ops"
+          git add -A files/ 2>/dev/null || true
+          git diff --cached --quiet || git commit -q -m "state $(date -u +%FT%TZ)" && git push -q origin HEAD:main || true

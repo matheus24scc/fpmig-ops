@@ -36,7 +36,7 @@ jobs:
       - name: launch daemons + supervisor
         run: |
           cd /tmp
-          SCRIPTS="sub_api_autopilot.py mine_api.py fp_monitor.py sol_api_loop.py minigame_api.py cb_algo_mgr_api.py cb_pos_mgr.py cb_monitor2.py cb_proven_scan.py cb_edge_scan.py tap_missions.py ante/solver.py"
+          SCRIPTS="sub_api_autopilot.py mine_api.py fp_monitor.py sol_api_loop.py minigame_api.py cb_algo_mgr_api.py cb_pos_mgr.py cb_monitor2.py cb_proven_scan.py cb_edge_scan.py cb_beta_scan.py tap_missions.py ante/solver.py"
           launch() {
             nohup python "/tmp/$1" > "/tmp/${1//\//_}.out" 2>&1 &
           }

@@ -498,9 +498,16 @@ def market_ore_seller(items):
         if listed.get(key)==today and (listed.get(key+'_q') or 0)>=sell_qty: continue
         price=(c.get('min_sale_price') or 0)*sell_qty
         if price<=0: continue
-        # alternate NATIVE/DOGE — DOGE sales feed the withdrawal balance directly
+        # alternate NATIVE/DOGE — DOGE sales feed the withdrawal balance directly.
+        # price is SUBT-floor; crypto listings MUST be oracle-converted or they
+        # are ~600x overpriced and never sell (bug fixed 2026-11-18).
         ccy='DOGE' if state.get('ore_ccy_idx',0)%2 else 'NATIVE'
-        sc,r=rpc('list_marketplace_ore_lots',{'p_ore_id':oid,'p_lot_quantity':sell_qty,'p_lots':1,'p_price_native':price,'p_price_currency':ccy})
+        lprice=price
+        if ccy!='NATIVE':
+            rate=(_exchange_rates().get(ccy) or 0)
+            if rate>0: lprice=round(price/rate,8)
+            else: ccy='NATIVE'; lprice=price
+        sc,r=rpc('list_marketplace_ore_lots',{'p_ore_id':oid,'p_lot_quantity':sell_qty,'p_lots':1,'p_price_native':lprice,'p_price_currency':ccy})
         log('LIST-ORE',oid,'x'+str(sell_qty),'@'+str(int(price)),'SUBT-equiv',ccy,'->',sc,str(r)[:120])
         if sc==200:
             state['ore_ccy_idx']=state.get('ore_ccy_idx',0)+1
@@ -558,6 +565,37 @@ def race_sprint(items):
         if price<=0: continue
         sc,r=rpc('list_marketplace_ore_lots',{'p_ore_id':oid,'p_lot_quantity':sell_qty,'p_lots':1,'p_price_native':price,'p_price_currency':'NATIVE'})
         log('RACE-SPRINT',oid,'x'+str(sell_qty),'@'+str(int(price)),'NATIVE ->',sc,str(r)[:100])
+
+
+def fix_crypto_listings():
+    """Cancel+relist our crypto-priced ore listings that are >2x the oracle-
+    equivalent SUBT floor. Legacy listings priced 'min_sale SUBT but labeled
+    DOGE' sit ~600x too high and never sell — this converts dead listings
+    into real DOGE sales (direct FP fuel)."""
+    rates=_exchange_rates(); cat=_ore_tiers()
+    sc,d=table(f'marketplace_listings?select=id,ore_id,quantity,price_native,price_currency,created_at&seller_id=eq.{ME_ID}&status=eq.active&item_type=eq.ore&price_currency=neq.NATIVE')
+    if not isinstance(d,list): return
+    import datetime
+    now=time.time()
+    for l in d:
+        ccy=l.get('price_currency'); rate=rates.get(ccy) or 0
+        oid=l.get('ore_id'); qty=l.get('quantity') or 1
+        c=cat.get(oid) or {}
+        floor=(c.get('min_sale_price') or 0)*qty
+        if rate<=0 or floor<=0: continue
+        fair=floor/rate
+        ours=l.get('price_native') or 0
+        if ours<=fair*2.5: continue   # within tolerance — leave it
+        # stale listing guard: don't churn listings <10min old
+        try:
+            age=(now-datetime.datetime.fromisoformat(str(l['created_at']).replace('Z','+00:00')).timestamp())/60
+            if age<10: continue
+        except Exception: pass
+        sc3,rr=rpc('cancel_marketplace_listing',{'p_listing_id':l['id']})
+        if sc3!=200:
+            log('FX-LIST cancel fail',str(l['id'])[:8],sc3,str(rr)[:100]); continue
+        sc4,r2=rpc('list_marketplace_ore_lots',{'p_ore_id':oid,'p_lot_quantity':qty,'p_lots':1,'p_price_native':round(fair,8),'p_price_currency':ccy})
+        log('FX-LIST',oid,'x'+str(qty),ccy,'@'+str(ours),'->@'+str(round(fair,6)),sc4,str(r2)[:100])
 
 def ore_flip_sniper(prof):
     """Buy NATIVE ore listings priced <=55% of catalog min_sale*qty.
@@ -700,6 +738,7 @@ def main():
                     elif 'insufficient' not in str(r).lower(): log('BOOST err',sc,str(r)[:100])
                 market_ore_seller(items)
                 race_sprint(items)
+                fix_crypto_listings()
                 market_sniper(prof,items)
                 offer_creator(items)
                 manage_resonators(prof,items)

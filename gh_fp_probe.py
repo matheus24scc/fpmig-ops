@@ -57,22 +57,26 @@ async def main():
         except Exception as e:
             print('page eval err', repr(e)[:200], flush=True)
             info = {}
-        # OAuth: click "Sign in with FaucetPay" -> authorize -> back with session
-        clicked = await pg.evaluate("""()=>{
-          const vis=e=>!!(e.offsetWidth||e.offsetHeight);
-          const els=[...document.querySelectorAll('a,button')].filter(vis);
-          const b=els.find(e=>/faucetpay/i.test(e.innerText||''));
-          if(b){b.click();return (b.innerText||'').trim().slice(0,50)} return null;
-        }""")
-        print('oauth click:', clicked, flush=True)
+        # OAuth: provider URL -> authorize page -> Authorize -> callback
+        try:
+            await pg.goto('https://clickclaims.online/auth/login?provider=faucetpay',
+                          wait_until='domcontentloaded', timeout=45000)
+        except Exception as e:
+            print('oauth goto err', repr(e)[:120], flush=True)
         for i in range(30):
             await pg.wait_for_timeout(2500)
             u = pg.url
             print('nav', i, u[:110], flush=True)
-            # done when back on clickclaims but past the auth/login interstitial
-            if 'clickclaims' in u and '/auth/login' not in u:
+            if 'faucetpay.io/oauth/authorize' in u:
+                # click Authorize
+                try:
+                    await pg.click('button:has-text("Authorize"),button[type=submit]', timeout=5000)
+                    print('authorize clicked', flush=True)
+                except Exception as e:
+                    print('authz click err', repr(e)[:100], flush=True)
+                continue
+            if 'clickclaims' in u and '/auth/' not in u:
                 break
-            # also check for popup pages doing the oauth
             for t in ctx.pages:
                 if 'faucetpay.io' in t.url:
                     print('  fp tab:', t.url[:100], flush=True)

@@ -50,6 +50,29 @@ async def main():
           return {url:location.href,btns,body:document.body.innerText.slice(0,400)};
         }""")
         print('clickClaims page:', json.dumps(info)[:800], flush=True)
+        # OAuth: click "Sign in with FaucetPay" -> authorize -> back with session
+        clicked = await pg.evaluate("""()=>{
+          const vis=e=>!!(e.offsetWidth||e.offsetHeight);
+          const els=[...document.querySelectorAll('a,button')].filter(vis);
+          const b=els.find(e=>/faucetpay/i.test(e.innerText||''));
+          if(b){b.click();return (b.innerText||'').trim().slice(0,50)} return null;
+        }""")
+        print('oauth click:', clicked, flush=True)
+        for i in range(12):
+            await pg.wait_for_timeout(2500)
+            u = pg.url
+            print('nav', i, u[:100], flush=True)
+            if 'clickclaims' in u and 'faucetpay' not in u:
+                break
+        await pg.wait_for_timeout(4000)
+        info2 = await pg.evaluate("""()=>{
+          const vis=e=>!!(e.offsetWidth||e.offsetHeight);
+          const btns=[...document.querySelectorAll('button,input[type=submit],a.btn,[role=button]')].filter(vis)
+            .map(e=>(e.innerText||e.value||'').trim().slice(0,50)).filter(Boolean).slice(0,12);
+          const forms=[...document.querySelectorAll('form')].filter(vis).length;
+          return {url:location.href,btns,forms,body:document.body.innerText.slice(0,300)};
+        }""")
+        print('after oauth:', json.dumps(info2)[:800], flush=True)
         # try claim via fetch inside page (same trick as worker)
         res = await pg.evaluate("""async()=>{
           const vis=e=>!!(e.offsetWidth||e.offsetHeight);

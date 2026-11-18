@@ -136,8 +136,8 @@ def analyze(pair,fund):
         if f<0: score+=1; reasons.append(f'fund{f:+.0f}%')
         elif f>15: score-=1; reasons.append(f'fund{f:+.0f}%')
     # --- daily timeframe: THE validated pattern (RSI14d<30 -> 2d bounce, ~400d backtest)
-    r_d=None; r_d_prev=None
-    cd=candles(pair,86400,40)
+    r_d=None; r_d_prev=None; dc=[]
+    cd=candles(pair,86400,100)
     if cd and len(cd)>=20:
         dc=[x[4] for x in cd]
         r_d=rsi(dc)
@@ -155,7 +155,8 @@ def analyze(pair,fund):
             med=sorted(vols)[len(vols)//2] if vols else 0
             capit_d = ret<=-0.07 and med>0 and (cap[5] or 0)>=2.5*med and today[4]>cap[3]
     body1=(closes[-1]-c1[-1][3])/c1[-1][3]*100 if c1[-1][3] else 0
-    return dict(pair=pair,rsi1=r1,rsi4=r4,rsi_d=r_d,r_d_prev=r_d_prev,two_down_d=two_down_d,hook_d=hook_d,capit_d=capit_d,dist_low=dist_low,higher_low=higher_low,
+    lab_hit = lab_live(pair,cd,dc) if (cd and len(dc)>=20) else False
+    return dict(pair=pair,lab_hit=lab_hit,rsi1=r1,rsi4=r4,rsi_d=r_d,r_d_prev=r_d_prev,two_down_d=two_down_d,hook_d=hook_d,capit_d=capit_d,dist_low=dist_low,higher_low=higher_low,
                 rev=rev,why=why,climax=climax,dry=dry,stable3=stable3,chg24=chg24,
                 px=px,funding=f,score=score,reasons=reasons,body1=body1)
 def load_signals():
@@ -255,6 +256,63 @@ def proven_patterns():
     except Exception: pass
     _extra_cache['t']=time.time(); _extra_cache['d']=d
     return {**PROVEN_PATTERNS, **d}
+
+_lab_cache={'t':0,'d':{}}
+def lab_detail():
+    if time.time()-_lab_cache['t']<3600: return _lab_cache['d']
+    try:
+        j=json.load(open('/tmp/cb_lab_proven.json'))
+        _lab_cache['d']=j.get('detail') or {}
+    except Exception: _lab_cache['d']={}
+    _lab_cache['t']=time.time(); return _lab_cache['d']
+
+def _rsi(cl,p=14):
+    if len(cl)<p+1: return None
+    g=l=0.0
+    for i in range(1,p+1):
+        d=cl[i]-cl[i-1]; g+=max(d,0); l+=max(-d,0)
+    ag,al=g/p,l/p
+    for i in range(p+1,len(cl)):
+        d=cl[i]-cl[i-1]; ag=(ag*(p-1)+max(d,0))/p; al=(al*(p-1)+max(-d,0))/p
+    return 100-100/(1+ag/al) if al else 100.0
+
+def lab_live(pair,cd,dc):
+    """True if ANY lab-proven pattern for this coin fires on latest daily bars.
+    Only long patterns tradeable on spot (bigup_fade excluded)."""
+    det=lab_detail().get(pair.split('-')[0])
+    if not det: return False
+    pats=(det.get('patterns') or {}).keys()
+    n=len(dc)
+    for pn in pats:
+        if pn=='bigup_fade': continue
+        try:
+            if pn in ('rsi30','rsi35'):
+                lv=int(pn[3:]); r=_rsi(dc)
+                if r is not None and r<lv: return pn
+            elif pn in ('dn3','dn4','dn5'):
+                k=int(pn[2:])
+                if n>k and all(dc[n-1-j]<dc[n-2-j] for j in range(k)): return pn
+            elif pn=='nearhigh':
+                if n>=91:
+                    hi=max(dc[-91:-1]); vols=[(x[5] or 0) for x in cd[-60:-1] if (x[5] or 0)>0]
+                    med=sorted(vols)[len(vols)//2] if vols else 0
+                    if med>0 and dc[-1]>=hi*0.96 and (cd[-2][5] or 0)>=1.2*med: return pn
+            elif pn=='rsidiv':
+                if n>=30:
+                    r_now=_rsi(dc); r_prev=_rsi(dc[:-14])
+                    if r_now is not None and r_prev is not None and dc[-1]<dc[-15] and r_now>r_prev and r_now<45: return pn
+            elif pn=='nr7':
+                if n>=9:
+                    rng=[(cd[i][2]-cd[i][3])/cd[i][1] if cd[i][1] else 9e9 for i in range(n-1)]
+                    if rng and rng[-1]==min(rng[-7:]) and cd[-1][4]>cd[-1][1]: return pn
+            elif pn=='postdump5':
+                if n>=4 and cd[-2][4] and cd[-5][4] and cd[-2][4]/cd[-5][4]-1<=-0.05: return pn
+            elif pn=='wknd':
+                import datetime as _d
+                if _d.datetime.utcfromtimestamp(cd[-2][0]).weekday()==4: return pn
+        except Exception: continue
+    return False
+
 def is_val(a):
     """Validated >=75% daily patterns (winrate+stability+liquidity filtered)."""
     rd=a.get('rsi_d'); p=a['pair']
@@ -266,6 +324,7 @@ def is_val(a):
     if spec.get('beta'): return True   # presence in cb_beta_proven.json = live >2.2sigma divergence + trend + backtest gates
     if spec.get('squeeze'): return True  # presence in cb_squeeze_proven.json = live bandwidth squeeze + expansion + backtest gates
     if spec.get('fusion'): return True   # presence in cb_fusion_proven.json = >=2 families agree + score>=70
+    if spec.get('lab'): return bool(a.get('lab_hit'))  # lab-proven pattern must be LIVE right now
     if rd is None or rd>=spec.get('rsi',101): return False
     if spec.get('two_down'): return bool(a.get('two_down_d'))
     if spec.get('hook'): return bool(a.get('hook_d'))

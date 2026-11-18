@@ -58,7 +58,7 @@ jobs:
               done
             } > "$ST/files/heartbeat.txt"
             cd "$ST" && git config user.email ops@local && git config user.name ops \
-              && git add -A files 2>/dev/null \
+              && git pull -q --rebase 2>/dev/null; git add -A files 2>/dev/null \
               && { git diff --cached --quiet || { git commit -qm "snap $(date -u +%H%M)" && git push -q; }; } \
               && cd /tmp || true
           }
@@ -85,5 +85,6 @@ jobs:
           done
           cp -f /tmp/ante/wallet.json /tmp/ante/hints.jsonl files/ante/ 2>/dev/null || true
           git config user.email "ops@local" && git config user.name "ops"
+          git pull -q --rebase 2>/dev/null || true
           git add -A files/ 2>/dev/null || true
           git diff --cached --quiet || git commit -q -m "state $(date -u +%FT%TZ)" && git push -q || true

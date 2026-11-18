@@ -75,7 +75,7 @@ def manage_pickaxes(prof):
         cat=_pickaxe_catalog()
         cand=[c for c in cat if c.get('is_purchasable') and (c.get('power') or 0)>=2 and (c.get('price_native') or 0)>0]
         cand.sort(key=lambda c:c.get('price_native') or 1e18)
-        if cand and bal0-(cand[0].get('price_native') or 0)>=550:
+        if cand and bal0-(cand[0].get('price_native') or 0)>=1100:
             b=cand[0]
             sc,r=rpc('buy_pickaxe',{'p_catalog_id':b['id']})
             log('BUY pickaxe (all-broken recovery)',b['id'],'pwr',b['power'],'dur',b['durability_max'],'price',b['price_native'],'->',sc,jdump(r,150))

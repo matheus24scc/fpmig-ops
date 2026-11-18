@@ -47,6 +47,10 @@ jobs:
             {
               echo "=== $(date -u +%FT%TZ) ==="
               for s in $SCRIPTS; do pgrep -f "python /tmp/$s" >/dev/null && echo "UP $s" || echo "DOWN $s"; done
+              for s in $SCRIPTS; do
+                o="/tmp/${s//\//_}.out"
+                [ -f "$o" ] && { echo "--- $s"; tail -5 "$o"; }
+              done
             } > "$ST/files/heartbeat.txt"
             cd "$ST" && git config user.email ops@local && git config user.name ops \
               && git add -A files 2>/dev/null \

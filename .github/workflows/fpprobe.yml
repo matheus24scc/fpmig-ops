@@ -1,0 +1,28 @@
+name: fpprobe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: deps
+        run: |
+          pip install -q playwright curl_cffi
+          playwright install chromium
+          sudo apt-get install -y -q xvfb >/dev/null 2>&1 || true
+      - name: fetch state
+        run: |
+          git clone --depth 1 "https://x-access-token:${{ secrets.OPS_PAT }}@github.com/matheus24scc/fpmig-state.git" ghstate
+      - name: probe
+        run: |
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1280x800x24 &
+          sleep 2
+          xvfb-run -a python gh_fp_probe.py

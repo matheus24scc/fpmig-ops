@@ -8,7 +8,7 @@ from sub_api import rpc, table
 
 LOG='/tmp/mine_api.log'
 SIZE=280; LAYERS=4
-DIG_CD=31.5
+DIG_CD=17.0
 
 def log(*a):
     line=' '.join(str(x) for x in a)
@@ -71,7 +71,7 @@ def main():
                     log('state err',sc,str(d)[:150]); time.sleep(20); continue
                 session=d['session']['id']
                 rev=build_revealed(d)
-                hits_used=d.get('hits_used',0); hits_max=d.get('hits_max',15)
+                hits_used=d.get('hits_used',0); hits_max=(d.get('hits_max') or 15)+(d.get('boost_hits') or 0)
                 haul=d.get('haul') or {}
                 last_state=time.time()
                 pk=equipped_pickaxe()
@@ -94,6 +94,7 @@ def main():
                     except Exception as e: log('coin exc',repr(e)[:80])
                 recharged=False
                 rech_price=d.get('recharge_price') or 1000
+                log(f'recharges_left={d.get("recharges_left")} hand_cd={d.get("hand_cooldown")}')
             # --- robot hunt: they carry crypto (TRX/DOGE/SOL...) — kill for the payload
             if robots:
                 rb=robots[0]

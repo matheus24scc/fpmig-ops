@@ -684,7 +684,12 @@ def main():
             if cb: log('CRYPTO',json.dumps(cb))
             # auto-withdraw: DOGE pool -> Coinbase deposit addr when >= ~$0.02 (~0.34 DOGE)
             try:
-                doge=float(prof.get('balance_doge') or 0)
+                # withdraw needs local browser (CDP) — GH runner has none;
+                # local doge_watch.py handles it via heartbeat balance
+                if not os.path.exists('/tmp/pwenv/bin/python'):
+                    doge=0.0
+                else:
+                    doge=float(prof.get('balance_doge') or 0)
                 marker='/tmp/sub_doge_withdrawn.flag'
                 stale=(not os.path.exists(marker)) or (time.time()-os.path.getmtime(marker)>7200)
                 if doge>=0.36 and stale:

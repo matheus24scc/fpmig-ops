@@ -41,15 +41,22 @@ async def main():
         ck = await ctx.cookies('https://faucetpay.io')
         print('ctx cookies now:', [c['name'] for c in ck], flush=True)
         # 2) clickClaims claim attempt
-        await pg.goto('https://clickclaims.online', wait_until='domcontentloaded', timeout=45000)
+        try:
+            await pg.goto('https://clickclaims.online', wait_until='domcontentloaded', timeout=90000)
+        except Exception as e:
+            print('goto err', repr(e)[:150], flush=True)
         await pg.wait_for_timeout(6000)
-        info = await pg.evaluate("""()=>{
-          const vis=e=>!!(e.offsetWidth||e.offsetHeight);
-          const btns=[...document.querySelectorAll('button,input[type=submit],a.btn,[role=button]')].filter(vis)
-            .map(e=>(e.innerText||e.value||'').trim().slice(0,50)).filter(Boolean).slice(0,12);
-          return {url:location.href,btns,body:document.body.innerText.slice(0,400)};
-        }""")
-        print('clickClaims page:', json.dumps(info)[:800], flush=True)
+        try:
+            info = await pg.evaluate("""()=>{
+              const vis=e=>!!(e.offsetWidth||e.offsetHeight);
+              const btns=[...document.querySelectorAll('button,input[type=submit],a.btn,[role=button]')].filter(vis)
+                .map(e=>(e.innerText||e.value||'').trim().slice(0,50)).filter(Boolean).slice(0,12);
+              return {url:location.href,btns,body:document.body.innerText.slice(0,400)};
+            }""")
+            print('clickClaims page:', json.dumps(info)[:800], flush=True)
+        except Exception as e:
+            print('page eval err', repr(e)[:200], flush=True)
+            info = {}
         # OAuth: click "Sign in with FaucetPay" -> authorize -> back with session
         clicked = await pg.evaluate("""()=>{
           const vis=e=>!!(e.offsetWidth||e.offsetHeight);

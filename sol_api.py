@@ -17,6 +17,7 @@ def _refresh():
     r=requests.post(B+'/auth/auth/refresh',json={'refreshToken':c['rt']},impersonate='chrome',timeout=20,
                     headers={'Content-Type':'application/json','Origin':'https://solfarmer.io'})
     j=r.json()
+    print('refresh',r.status_code,str(j)[:150],flush=True)
     if r.status_code==200 and j.get('accessToken'):
         c['at']=j['accessToken']
         if j.get('refreshToken'): c['rt']=j['refreshToken']

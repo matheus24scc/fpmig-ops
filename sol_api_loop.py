@@ -31,7 +31,9 @@ def settle():
 
 def balance():
     sc,d=ledger('GET',f'/balance/{UID}')
-    return d if isinstance(d,dict) else {}
+    if not isinstance(d,dict):
+        log('bal err',sc,str(d)[:200]); return {}
+    return d
 
 def try_chest():
     from curl_cffi import requests

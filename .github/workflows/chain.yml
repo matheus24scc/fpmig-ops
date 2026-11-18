@@ -1,0 +1,32 @@
+name: chain
+
+on:
+  workflow_run:
+    workflows: ['ops']
+    types: [completed]
+
+jobs:
+  rearm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const started = new Date(run.run_started_at).getTime();
+            const ended = new Date(run.updated_at).getTime();
+            const mins = (ended - started) / 60000;
+            core.info(`ops run ${run.id} lasted ${mins.toFixed(1)}min conclusion=${run.conclusion}`);
+            // only re-arm if the run was healthy (long-lived); avoids hot-loop on instant failure
+            if (mins < 30) {
+              core.info('run too short — not re-arming (schedule will retry)');
+              return;
+            }
+            await github.rest.actions.createWorkflowDispatch({
+              owner: 'matheus24scc',
+              repo: 'fpmig-ops',
+              workflow_id: 'ops.yml',
+              ref: 'master',
+            });
+            core.info('re-armed ops');

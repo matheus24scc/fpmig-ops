@@ -4,9 +4,6 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '23 */6 * * *'
-  workflow_run:
-    workflows: ['ops']
-    types: [completed]
 
 concurrency:
   group: ops-chain

@@ -131,13 +131,13 @@ def main():
                     scp,prof=table(f'profiles?id=eq.{ME_ID}&select=balance_native&limit=1')
                     bal=(prof[0].get('balance_native') if isinstance(prof,list) and prof else 0) or 0
                     price=rech_price
-                    if bal>=price+200:
+                    if bal>=price+50:
                         scr,rr=rpc('mine3d_recharge',{'p_session_id':session})
                         log('RECHARGE',scr,str(rr)[:150])
                         if scr==200:
                             recharged=True; rev=None  # force state refresh for new hits
                     else:
-                        log(f'hits exhausted ({hits_used}/{hits_max}) bal={bal} < recharge {price}+200 — bare hand mode')
+                        log(f'hits exhausted ({hits_used}/{hits_max}) bal={bal} < recharge {price}+50 — bare hand mode')
                 except Exception as e: log('recharge err',repr(e)[:100])
                 recharged=True  # don't spam profile rpc every cycle
             cands=frontier(rev)

@@ -243,6 +243,10 @@ def proven_patterns():
         try:
             e=json.load(open('/tmp/cb_edge_proven.json'))
             d.update(e.get('patterns') or {})
+            try:
+                b=json.load(open('/tmp/cb_beta_proven.json'))
+                d.update(b.get('patterns') or {})
+            except Exception: pass
         except Exception: pass
     except Exception: pass
     _extra_cache['t']=time.time(); _extra_cache['d']=d
@@ -255,6 +259,7 @@ def is_val(a):
     spec=proven_patterns().get(p)
     if not spec: return False
     if spec.get('capit'): return bool(a.get('capit_d'))
+    if spec.get('beta'): return True   # presence in cb_beta_proven.json = live >2.2sigma divergence + trend + backtest gates
     if rd is None or rd>=spec.get('rsi',101): return False
     if spec.get('two_down'): return bool(a.get('two_down_d'))
     if spec.get('hook'): return bool(a.get('hook_d'))

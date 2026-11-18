@@ -86,11 +86,12 @@ def scan_once():
         # liquidity
         t=get(f'https://api.exchange.coinbase.com/products/{pair}/ticker')
         if not t or float(t['price'])*float(t['volume'])<200000: continue
-        found[pair]={'z':round(z,2),'ret10':round((cl[-1]/cl[-LOOK]-1)*100,2),
+        found[pair.split('-')[0]]={'z':round(z,2),'ret10':round((cl[-1]/cl[-LOOK]-1)*100,2),
                      'btc_ret10':round((bc[-1]/bc[-LOOK]-1)*100,2),
                      'winrate':round(w,1),'signals':len(ent),'hold':HOLD}
         log('FOUND',pair,json.dumps(found[pair]))
-    json.dump({'ts':time.time(),'pairs':found},open(OUT,'w'))
+    for b in found.values(): b['beta']=True
+    json.dump({'ts':time.time(),'patterns':found},open(OUT,'w'))
     log('scan done —',len(found),'qualified pairs')
 
 if __name__=='__main__':

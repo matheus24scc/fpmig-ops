@@ -80,9 +80,16 @@ def main():
                 pnl=(px/pos['entry_price']-1)*100
                 r=rsi(candles(pair))
                 log(f"{pair} bal-check px={px} pnl={pnl:+.2f}% age={age:.1f}h rsi={r:.0f}")
+                # profit-lock: once peak>=+1.2%, trail 1.5% below peak —
+                # a good gain is worth more than riding to time-stop into loss
+                peak=pos.get('peak_pnl',-999.0)
+                if pnl>peak:
+                    pos['peak_pnl']=pnl; peak=pnl; pos['_dirty']=True
+                trail=(peak-1.5) if peak>=1.2 else None
                 reason=None
                 if pnl<=SL_PCT*100: reason=f'SL {pnl:.1f}%'
                 elif pnl>=TP_PCT*100: reason=f'TP {pnl:.1f}%'
+                elif trail is not None and pnl<=trail: reason=f'TRAIL peak={peak:.1f}% pnl={pnl:.1f}%'
                 elif age>=HOLD_S/3600: reason=f'TIME {age:.1f}h'
                 elif r>=RSI_EXIT: reason=f'RSI_OVERBOUGHT {r:.0f}'
                 if reason:
@@ -91,7 +98,9 @@ def main():
                         ps.remove(pos); changed=True; log(f'{pair} closed')
                     else:
                         log(f'{pair} sell incomplete — retry next cycle')
-            if changed: save(ps)
+            if changed or any(p.get('_dirty') for p in ps):
+                for p in ps: p.pop('_dirty',None)
+                save(ps)
         except Exception as e:
             log('err '+repr(e)[:150])
         time.sleep(60)

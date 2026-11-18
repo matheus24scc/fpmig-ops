@@ -219,6 +219,7 @@ def open_positions():
     except Exception: return []
 
 EXECF='/tmp/cb_executed.json'
+ARMEDF='/tmp/cb_armed.json'
 T2F='/tmp/cb_t2_seen.json'
 T2_MIN_SEEN=6      # qualifying scans required (pattern must REPEAT, like ALGO's days)
 T2_MIN_SPAN=20*3600 # and span at least ~20h — "caçar o padrão de vários dias"
@@ -284,10 +285,16 @@ def executed_recently(pair,hrs=24):
     except Exception: pass
     return False
 
+def load_armed():
+    try: return json.load(open(ARMEDF))
+    except Exception: return {}
+def save_armed(a):
+    try: json.dump(a,open(ARMEDF,'w'))
+    except Exception: pass
 def execute(pair,px):
     """Auto-buy ~$1.20 USDC on ENTRY signal; registers position for cb_pos_mgr."""
-    if executed_recently(pair,hrs=72):
-        log(f'EXECUTE {pair}: skip — already traded <72h ago'); return
+    if executed_recently(pair,hrs=12):
+        log(f'EXECUTE {pair}: skip — already traded <12h ago'); return
     pos=open_positions()
     if len(pos)>=MAX_POS:
         log(f"EXECUTE {pair}: skip — {len(pos)} positions open (max {MAX_POS})"); return
@@ -343,10 +350,15 @@ def main():
             bok=btc_ok()
             log("BTC gate:", "OPEN" if bok else "CLOSED")
             cands=[]
+            armed=load_armed()
             for pair in universe():
                 if pair=='BTC': continue
                 a=analyze(pair,fund)
-                if not a: continue
+                if not a:
+                    armed[pair]=True  # couldn't evaluate -> treat as reset
+                    continue
+                # edge-trigger: signal OFF -> re-arm for next fresh signal
+                if not is_val(a): armed[pair]=True
                 time.sleep(0.12)
                 # tier-1 candidate: oversold + score>=7 | tier-2 (ALGO-real):
                 # RSI<38 + near 7d low + higher-low + reversal — no BTC gate
@@ -372,8 +384,8 @@ def main():
                 elif t2q and a['score']>=5:
                     flag=f'~ t2 {len(seen_arr)}/{T2_MIN_SEEN} ~'
                 log(f"{flag:22} {a['pair']:6} px={a['px']:.6g} rsi1h={a['rsi1']:.0f} rsiD={a.get('rsi_d') and round(a['rsi_d'],1)} dLow={a['dist_low']:.1f}% f={a['funding'] if a['funding'] is not None else 'n/a'} score={a['score']} | {' '.join(a['reasons'])}")
-                if flag=='*** VALIDATED ***' and a['pair'] not in alerted:
-                    alerted.add(a['pair'])
+                if flag=='*** VALIDATED ***' and a['pair'] not in alerted and armed.get(a['pair'],True):
+                    alerted.add(a['pair']); armed[a['pair']]=False; save_armed(armed)
                     px=a['px']
                     hook = a['pair'] in PROVEN_HOOK
                     log(f">>> EXECUTE[VALIDATED]: {a['pair']} rsiD={a['rsi_d']:.1f}{' hook' if hook else ''} — daily RSI<30 pattern (win>=75% backtest)")
@@ -384,6 +396,7 @@ def main():
                 still=[x for x in cands if x['pair']==a and
                        ((x.get('rsi_d') is not None and x['rsi_d']<30) or x['score']>=8)]
                 if not still: alerted.discard(a)
+            save_armed(armed)
             track_signals(cands)
             log("scan done,",len(cands),"candidates")
         except Exception as e:

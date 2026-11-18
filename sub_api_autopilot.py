@@ -526,6 +526,26 @@ def listing_repricer():
         log('REPRICE',oid,'x'+str(l.get('quantity')),'@'+str(int(ours)),'->@'+str(int(newp)),ccy,'->',sc4,str(rr)[:100])
         state[key]=now
 
+
+def race_sprint(items):
+    """Race day: dump sellable ore into NATIVE listings at min_sale so SUBT
+    lands fast -> fuels mine3d_recharge -> more race swings. Skips ores that
+    already have an active NATIVE listing (no double-listing)."""
+    cat=_ore_tiers(); res=_ore_reserves()
+    sc,d=table(f'marketplace_listings?select=ore_id&status=eq.active&item_type=eq.ore&price_currency=eq.NATIVE&seller_id=eq.{ME_ID}')
+    have={l.get('ore_id') for l in d} if isinstance(d,list) else set()
+    for o in items.get('ores',[]):
+        oid=o.get('catalog_id'); qty=o.get('quantity',0)
+        c=cat.get(oid) or {}
+        if c.get('season_id') or qty<=0 or oid in have: continue
+        tier=c.get('tier') or 0
+        sell_qty=qty if tier>=3 else qty-(res.get(oid) or 0)
+        if sell_qty<=0: continue
+        price=(c.get('min_sale_price') or 0)*sell_qty
+        if price<=0: continue
+        sc,r=rpc('list_marketplace_ore_lots',{'p_ore_id':oid,'p_lot_quantity':sell_qty,'p_lots':1,'p_price_native':price,'p_price_currency':'NATIVE'})
+        log('RACE-SPRINT',oid,'x'+str(sell_qty),'@'+str(int(price)),'NATIVE ->',sc,str(r)[:100])
+
 def ore_flip_sniper(prof):
     """Buy NATIVE ore listings priced <=55% of catalog min_sale*qty.
     Bought ore lands in inventory -> market_ore_seller relists at min_sale
@@ -666,6 +686,7 @@ def main():
                     if sc==200: state['boost_day']=time.strftime('%Y-%m-%d'); log('BOOST bought ->',jdump(r,120))
                     elif 'insufficient' not in str(r).lower(): log('BOOST err',sc,str(r)[:100])
                 market_ore_seller(items)
+                race_sprint(items)
                 market_sniper(prof,items)
                 offer_creator(items)
                 manage_resonators(prof,items)

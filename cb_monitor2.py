@@ -248,6 +248,8 @@ def proven_patterns():
                 d.update(b.get('patterns') or {})
                 q=json.load(open('/tmp/cb_squeeze_proven.json'))
                 d.update(q.get('patterns') or {})
+                f=json.load(open('/tmp/cb_fusion_proven.json'))
+                d.update(f.get('patterns') or {})
             except Exception: pass
         except Exception: pass
     except Exception: pass
@@ -263,6 +265,7 @@ def is_val(a):
     if spec.get('capit'): return bool(a.get('capit_d'))
     if spec.get('beta'): return True   # presence in cb_beta_proven.json = live >2.2sigma divergence + trend + backtest gates
     if spec.get('squeeze'): return True  # presence in cb_squeeze_proven.json = live bandwidth squeeze + expansion + backtest gates
+    if spec.get('fusion'): return True   # presence in cb_fusion_proven.json = >=2 families agree + score>=70
     if rd is None or rd>=spec.get('rsi',101): return False
     if spec.get('two_down'): return bool(a.get('two_down_d'))
     if spec.get('hook'): return bool(a.get('hook_d'))

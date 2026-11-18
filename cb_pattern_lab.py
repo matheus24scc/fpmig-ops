@@ -129,7 +129,7 @@ def scan_once():
             r=eval_pattern(cl,c,mask,hold,sign)
             if r: pats[name]=r
         if pats:
-            out[base]={'patterns':pats,'fusion':True,'lab':True}
+            out[base]={'patterns':pats,'lab':True}
             log('LAB',base,json.dumps(pats)[:300])
         if k%40==0: log(f'..{k}/{len(pairs)} pairs={len(out)}')
     # flatten for monitor compatibility: each base -> first proven pattern entry

@@ -62,4 +62,4 @@ jobs:
           cp -f /tmp/ante/wallet.json /tmp/ante/hints.jsonl files/ante/ 2>/dev/null || true
           git config user.email "ops@local" && git config user.name "ops"
           git add -A files/ 2>/dev/null || true
-          git diff --cached --quiet || git commit -q -m "state $(date -u +%FT%TZ)" && git push -q origin HEAD:main || true
+          git diff --cached --quiet || git commit -q -m "state $(date -u +%FT%TZ)" && git push -q || true

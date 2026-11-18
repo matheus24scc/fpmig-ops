@@ -68,7 +68,20 @@ def manage_pickaxes(prof):
     picks=my_pickaxes()
     usable=[p for p in picks if not p['is_broken']]
     if not usable:
-        log('pickaxes: ALL BROKEN',[(p['catalog_id'],p['repairs']) for p in picks]); return
+        # all broken = unrepairable (pickaxe_not_repairable) — buy cheapest
+        # power>=2 pick so robot kills + tougher blocks unlock. Keep 550 reserve
+        # so a mine recharge (1050) is never blocked by this purchase.
+        bal0=prof.get('balance_native') or 0
+        cat=_pickaxe_catalog()
+        cand=[c for c in cat if c.get('is_purchasable') and (c.get('power') or 0)>=2 and (c.get('price_native') or 0)>0]
+        cand.sort(key=lambda c:c.get('price_native') or 1e18)
+        if cand and bal0-(cand[0].get('price_native') or 0)>=550:
+            b=cand[0]
+            sc,r=rpc('buy_pickaxe',{'p_catalog_id':b['id']})
+            log('BUY pickaxe (all-broken recovery)',b['id'],'pwr',b['power'],'dur',b['durability_max'],'price',b['price_native'],'->',sc,jdump(r,150))
+        else:
+            log('pickaxes: ALL BROKEN, bal',bal0,'— waiting to afford',cand[0]['id'] if cand else '?','price',cand[0].get('price_native') if cand else '?')
+        return
     best=max(usable,key=lambda p:(p['power'],-p['durability_current']))
     eq=[p for p in usable if p['is_equipped']]
     # equip best if current equipped is worse or broken

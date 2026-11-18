@@ -29,6 +29,8 @@ jobs:
           mkdir -p /tmp/ante
           cp -f state/files/* /tmp/ 2>/dev/null || true
           cp -f state/files/ante/* /tmp/ante/ 2>/dev/null || true
+          # code lives in checkout; daemons + their lib imports expect /tmp
+          cp -f *.py /tmp/ && mkdir -p /tmp/ante && cp -f ante/*.py /tmp/ante/
           ls /tmp | head -50
 
       - name: launch daemons + supervisor

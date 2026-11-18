@@ -36,6 +36,10 @@ async def main():
         body = await pg.evaluate('()=>document.body.innerText.slice(0,300)')
         print('FP dashboard:', 'LOGGED-IN' if 'gabrielgtx' in body else 'NOT-LOGGED-IN', flush=True)
         print(body[:200].replace('\n', ' | '), flush=True)
+        me = await pg.evaluate("""async()=>{try{const r=await fetch('/app-api/session/me',{credentials:'include'});return r.status+'|'+(await r.text()).slice(0,200)}catch(e){return 'err|'+e}}""")
+        print('session/me via page:', me, flush=True)
+        ck = await ctx.cookies('https://faucetpay.io')
+        print('ctx cookies now:', [c['name'] for c in ck], flush=True)
         # 2) clickClaims claim attempt
         await pg.goto('https://clickclaims.online', wait_until='domcontentloaded', timeout=45000)
         await pg.wait_for_timeout(6000)
